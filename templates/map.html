@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}World Map — SSH Threat Detection{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  .leaflet-container { background: #090d13; }
+  .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.7) saturate(0.8); }
+  .threat-popup .leaflet-popup-content-wrapper {
+    background: #0d1520;
+    border: 1px solid #1a2e47;
+    color: #c8d8e8;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    box-shadow: 0 0 20px rgba(0,212,255,0.2);
+  }
+  .threat-popup .leaflet-popup-tip { background: #1a2e47; }
+  .popup-ip    { color: #00d4ff; font-size: 1rem; margin-bottom: 0.4rem; }
+  .popup-row   { margin: 0.2rem 0; color: #5a7a99; }
+  .popup-row span { color: #c8d8e8; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <span class="page-title">// threat_map</span>
+  <span class="page-subtitle">global attack origin — dot size = risk score</span>
+</div>
+
+<div class="map-wrap">
+  <div id="map-loading" class="loading">LOADING MAP DATA</div>
+  <div id="map" style="display:none"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+fetch('/api/ips')
+  .then(r => r.json())
+  .then(data => {
+    // Filter IPs that have coordinates
+    const geoData = data.filter(d => d.lat && d.lon);
+
+    document.getElementById('map-loading').style.display = 'none';
+    const mapEl = document.getElementById('map');
+    mapEl.style.display = 'block';
+
+    // Init map
+    const map = L.map('map', {
+      center: [20, 10],
+      zoom: 2,
+      zoomControl: true,
+    });
+
+    // Dark tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(map);
+
+    // Color by risk label
+    const colors = {
+      CRITICAL: '#ff2d55',
+      HIGH:     '#ff6b35',
+      MEDIUM:   '#ffd60a',
+      LOW:      '#30d158',
+    };
+
+    geoData.forEach(ip => {
+      const color  = colors[ip.risk_label] || '#00d4ff';
+      const radius = Math.max(6, (ip.risk_score || 10) / 5);
+
+      const circle = L.circleMarker([ip.lat, ip.lon], {
+        radius,
+        fillColor:   color,
+        color:       color,
+        weight:      1,
+        opacity:     0.9,
+        fillOpacity: 0.5,
+      }).addTo(map);
+
+      circle.bindPopup(`
+        <div class="popup-ip">${ip.ip}</div>
+        <div class="popup-row">location: <span>${ip.city || '?'}, ${ip.country || 'Unknown'}</span></div>
+        <div class="popup-row">risk:     <span style="color:${color}">${(ip.risk_score||0).toFixed(1)}/100 (${ip.risk_label})</span></div>
+        <div class="popup-row">abuse:    <span>${ip.abuse_score}% (${ip.total_reports} reports)</span></div>
+        <div class="popup-row">failures: <span>${ip.total_failures}</span></div>
+        <div class="popup-row">users:    <span>${(ip.usernames||[]).join(', ')}</span></div>
+      `, { className: 'threat-popup' });
+
+      // Pulse animation on hover
+      circle.on('mouseover', function() { this.setStyle({ fillOpacity: 0.8, weight: 2 }); });
+      circle.on('mouseout',  function() { this.setStyle({ fillOpacity: 0.5, weight: 1 }); });
+    });
+
+    if (!geoData.length) {
+      document.getElementById('map').insertAdjacentHTML('afterend',
+        '<div class="loading" style="margin-top:1rem">NO GEOLOCATED IPs FOUND — private/local IPs have no coordinates</div>'
+      );
+    }
+  })
+  .catch(() => {
+    document.getElementById('map-loading').textContent = 'ERROR LOADING MAP DATA';
+  });
+</script>
+{% endblock %}

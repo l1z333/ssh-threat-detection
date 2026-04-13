@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SSH Threat Detection{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav>
+    <a class="nav-brand" href="/">
+      <span class="dot"></span>
+      SSH_THREAT_DETECT
+    </a>
+    <div class="nav-links">
+      <a href="/table"    class="{{ 'active' if active == 'table' }}">[ IP Table ]</a>
+      <a href="/timeline" class="{{ 'active' if active == 'timeline' }}">[ Timeline ]</a>
+      <a href="/map"      class="{{ 'active' if active == 'map' }}">[ World Map ]</a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main-content">
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat-card">
+        <div class="stat-label">Total Attempts</div>
+        <div class="stat-value" id="stat-attempts">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Unique IPs</div>
+        <div class="stat-value" id="stat-ips">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Enriched IPs</div>
+        <div class="stat-value" id="stat-enriched">—</div>
+      </div>
+      <div class="stat-card critical">
+        <div class="stat-label">Critical Threats</div>
+        <div class="stat-value" id="stat-critical">—</div>
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+
+  </main>
+</div>
+
+<!-- Rule toast -->
+<div class="rule-toast" id="rule-toast"></div>
+
+<script>
+  // Load stats on every page
+  fetch('/api/stats')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('stat-attempts').textContent  = d.total_attempts;
+      document.getElementById('stat-ips').textContent       = d.total_ips;
+      document.getElementById('stat-enriched').textContent  = d.enriched;
+      document.getElementById('stat-critical').textContent  = d.critical;
+    })
+    .catch(() => {});
+
+  // Toast helper
+  function showToast(msg) {
+    const t = document.getElementById('rule-toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 5000);
+  }
+
+  // Block IP handler
+  function blockIP(ip, btn) {
+    fetch(`/api/block/${ip}`, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        showToast('$ ' + d.rule);
+        btn.textContent = 'BLOCKED';
+        btn.classList.add('blocked');
+        btn.disabled = true;
+      })
+      .catch(() => showToast('Error generating rule'));
+  }
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

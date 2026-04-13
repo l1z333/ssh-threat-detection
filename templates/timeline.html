@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline — SSH Threat Detection{% endblock %}
+
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <span class="page-title">// attack_timeline</span>
+  <span class="page-subtitle">failed login attempts per hour</span>
+</div>
+
+<div class="chart-wrap">
+  <div id="chart-loading" class="loading">LOADING TIMELINE DATA</div>
+  <canvas id="timeline-chart" style="display:none"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+fetch('/api/timeline')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('chart-loading').style.display = 'none';
+    const canvas = document.getElementById('timeline-chart');
+    canvas.style.display = 'block';
+
+    const labels   = data.map(d => d.hour.replace('T', ' '));
+    const attempts = data.map(d => d.attempts);
+
+    new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Failed Attempts',
+          data: attempts,
+          backgroundColor: attempts.map(v =>
+            v >= 10 ? 'rgba(255,45,85,0.7)' :
+            v >= 5  ? 'rgba(255,107,53,0.7)' :
+                      'rgba(0,212,255,0.5)'
+          ),
+          borderColor: attempts.map(v =>
+            v >= 10 ? '#ff2d55' :
+            v >= 5  ? '#ff6b35' :
+                      '#00d4ff'
+          ),
+          borderWidth: 1,
+          borderRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0d1520',
+            borderColor: '#1a2e47',
+            borderWidth: 1,
+            titleColor: '#00d4ff',
+            bodyColor: '#c8d8e8',
+            titleFont: { family: 'Share Tech Mono' },
+            bodyFont:  { family: 'Share Tech Mono' },
+            callbacks: {
+              title: items => items[0].label,
+              label: item => ` ${item.raw} failed attempt${item.raw !== 1 ? 's' : ''}`,
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#5a7a99',
+              font: { family: 'Share Tech Mono', size: 11 },
+              maxRotation: 45,
+            },
+            grid: { color: 'rgba(26,46,71,0.5)' },
+          },
+          y: {
+            ticks: {
+              color: '#5a7a99',
+              font: { family: 'Share Tech Mono', size: 11 },
+              stepSize: 1,
+            },
+            grid: { color: 'rgba(26,46,71,0.5)' },
+            beginAtZero: true,
+          }
+        }
+      }
+    });
+  })
+  .catch(() => {
+    document.getElementById('chart-loading').textContent = 'ERROR LOADING TIMELINE';
+  });
+</script>
+{% endblock %}

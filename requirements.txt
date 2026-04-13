@@ -1,0 +1,10 @@
+# SSH Threat Detection Tool — Python dependencies
+# Layer 1 (parser.py) uses stdlib only: re, sqlite3, argparse, json, csv
+# Layer 2 adds: requests
+# Layer 3 adds: flask
+
+# Layer 2
+requests>=2.31.0
+
+# Layer 3
+flask>=3.0.0

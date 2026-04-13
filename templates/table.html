@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}IP Table — SSH Threat Detection{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <span class="page-title">// flagged_ips</span>
+  <span class="page-subtitle" id="table-count">loading...</span>
+</div>
+
+<div class="table-wrap">
+  <div class="table-controls">
+    <input
+      class="search-input"
+      type="text"
+      id="search"
+      placeholder="filter by ip, country, username..."
+      oninput="filterTable()"
+    >
+  </div>
+
+  <div id="table-body">
+    <div class="loading">FETCHING THREAT DATA</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allRows = [];
+let sortCol = 'risk_score';
+let sortAsc = false;
+
+// Country code → flag emoji
+function countryFlag(country) {
+  if (!country) return '';
+  const map = {
+    'Romania': '🇷🇴', 'Russia': '🇷🇺', 'Germany': '🇩🇪',
+    'United States': '🇺🇸', 'China': '🇨🇳', 'Netherlands': '🇳🇱',
+    'France': '🇫🇷', 'United Kingdom': '🇬🇧', 'India': '🇮🇳',
+    'Brazil': '🇧🇷', 'Ukraine': '🇺🇦', 'Canada': '🇨🇦',
+    'Japan': '🇯🇵', 'South Korea': '🇰🇷', 'Singapore': '🇸🇬',
+    'Vietnam': '🇻🇳', 'Indonesia': '🇮🇩', 'Iran': '🇮🇷',
+  };
+  return map[country] || '🌐';
+}
+
+function badgeHTML(label) {
+  return `<span class="badge badge-${label}">${label}</span>`;
+}
+
+function abuseBarHTML(score) {
+  return `
+    <div class="abuse-bar-wrap">
+      <div class="abuse-bar">
+        <div class="abuse-bar-fill" style="width:${score}%"></div>
+      </div>
+      <span>${score}%</span>
+    </div>`;
+}
+
+function renderTable(rows) {
+  if (!rows.length) {
+    document.getElementById('table-body').innerHTML =
+      '<div class="loading">NO THREATS FOUND</div>';
+    return;
+  }
+
+  const html = `
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sort('ip')"           class="${sortCol==='ip'?'sorted':''}">IP Address</th>
+          <th onclick="sort('risk_score')"   class="${sortCol==='risk_score'?'sorted':''}">Risk</th>
+          <th onclick="sort('risk_label')"   class="${sortCol==='risk_label'?'sorted':''}">Level</th>
+          <th onclick="sort('country')"      class="${sortCol==='country'?'sorted':''}">Location</th>
+          <th onclick="sort('abuse_score')"  class="${sortCol==='abuse_score'?'sorted':''}">Abuse %</th>
+          <th onclick="sort('total_failures')" class="${sortCol==='total_failures'?'sorted':''}">Failures</th>
+          <th>Usernames</th>
+          <th>First Seen</th>
+          <th>Block</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="ip-cell">${r.ip}</td>
+            <td>${(r.risk_score||0).toFixed(1)}</td>
+            <td>${badgeHTML(r.risk_label)}</td>
+            <td>
+              <div class="country-cell">
+                <span class="flag">${countryFlag(r.country)}</span>
+                <span>${r.city || ''}${r.city && r.country ? ', ' : ''}${r.country || 'Unknown'}</span>
+              </div>
+            </td>
+            <td>${abuseBarHTML(r.abuse_score||0)}</td>
+            <td>${r.total_failures}</td>
+            <td>${(r.usernames||[]).slice(0,3).join(', ')}${(r.usernames||[]).length>3?'…':''}</td>
+            <td>${r.first_seen ? r.first_seen.replace('T',' ').slice(0,16) : '—'}</td>
+            <td>
+              <button class="btn-block" onclick="blockIP('${r.ip}', this)">BLOCK</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+
+  document.getElementById('table-body').innerHTML = html;
+  document.getElementById('table-count').textContent =
+    `${rows.length} ip${rows.length !== 1 ? 's' : ''} flagged`;
+}
+
+function sort(col) {
+  if (sortCol === col) {
+    sortAsc = !sortAsc;
+  } else {
+    sortCol = col;
+    sortAsc = false;
+  }
+  applyFiltersAndSort();
+}
+
+function filterTable() {
+  applyFiltersAndSort();
+}
+
+function applyFiltersAndSort() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let rows = allRows.filter(r =>
+    (r.ip||'').includes(q) ||
+    (r.country||'').toLowerCase().includes(q) ||
+    (r.city||'').toLowerCase().includes(q) ||
+    (r.usernames||[]).join(',').toLowerCase().includes(q) ||
+    (r.risk_label||'').toLowerCase().includes(q)
+  );
+
+  rows.sort((a, b) => {
+    let va = a[sortCol] ?? '';
+    let vb = b[sortCol] ?? '';
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  renderTable(rows);
+}
+
+// Initial load
+fetch('/api/ips')
+  .then(r => r.json())
+  .then(data => {
+    allRows = data;
+    applyFiltersAndSort();
+  })
+  .catch(() => {
+    document.getElementById('table-body').innerHTML =
+      '<div class="loading">ERROR LOADING DATA</div>';
+  });
+</script>
+{% endblock %}
